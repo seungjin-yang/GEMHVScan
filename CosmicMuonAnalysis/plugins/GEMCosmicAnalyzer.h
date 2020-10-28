@@ -86,8 +86,8 @@ private:
   void resetBranchMuon();
   void resetBranchChamber();
 
-  const GEMEtaPartition* findEtaPartition(const GEMChamber*, const GlobalPoint&);
-  std::pair<const GEMRecHit*, float> findClosetHit(const float, const GEMRecHitCollection::range&);
+  const GEMEtaPartition*  findEtaPartition(const GEMChamber*, const GlobalPoint&);
+  const GEMRecHit* findClosetHit(const float, const GEMRecHitCollection::range&);
   DetIdCandidate getDetIdCandidate(unsigned int);
 
   // NOTE
@@ -166,7 +166,8 @@ private:
   int b_num_same_ieta_hit_;
   // 
   int b_bx_;
-  int b_first_cluster_strip_;
+  int b_strip_;
+  float b_first_cluster_strip_;
   int b_cluster_size_;
   float b_residual_x_;
   float b_residual_y_;

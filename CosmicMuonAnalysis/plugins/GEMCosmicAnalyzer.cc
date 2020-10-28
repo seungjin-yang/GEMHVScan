@@ -75,6 +75,7 @@ GEMCosmicAnalyzer::GEMCosmicAnalyzer(const edm::ParameterSet& pset) {
   tree_->Branch("num_same_ieta_hit", &b_num_same_ieta_hit_);
 
   tree_->Branch("bx", b_bx_);
+  tree_->Branch("strip", b_strip_);
   tree_->Branch("first_cluster_strip", &b_first_cluster_strip_);
   tree_->Branch("cluster_size", &b_cluster_size_);
 
@@ -186,13 +187,10 @@ void GEMCosmicAnalyzer::analyze(const edm::Event& event, const edm::EventSetup& 
   b_lumi_block_ = event.luminosityBlock();
   b_run_ = event.run();
 
-
-  // for (const reco::Muon& muon : *muon_view) {
   for (size_t idx = 0; idx < muon_view->size(); ++idx) {
     h_count_->Fill(2);
     const edm::RefToBase<reco::Muon>&& muon_ref = muon_view->refAt(idx);
     const reco::Muon* muon = muon_ref.get();
-
 
     const reco::Track* track = nullptr;
     if (muon->outerTrack().isNonnull()) {
@@ -233,9 +231,7 @@ void GEMCosmicAnalyzer::analyze(const edm::Event& event, const edm::EventSetup& 
     auto& propagator = is_incoming ? propagator_along : propagator_opposite;
     // propagation_direction = PropagationDirection::anyDirection;
 
-    ////////////////////////////////////////////////////////////////////////////
     // NOTE
-    ////////////////////////////////////////////////////////////////////////////
     const auto&& impact_parameter = transient_track.stateAtBeamLine().transverseImpactParameter();
     const auto&& inner_id = getDetIdCandidate(raw_inner_det_id);
     const auto&& outer_id = getDetIdCandidate(raw_outer_det_id);
@@ -289,7 +285,6 @@ void GEMCosmicAnalyzer::analyze(const edm::Event& event, const edm::EventSetup& 
 
     b_start_x_err_ = std::sqrt(start_state.localError().positionError().xx());
 
-
     for (const GEMRegion* region : gem->regions()) {
       bool is_opposite_region = (muon->eta() * region->region() < 0);
       if (is_incoming xor is_opposite_region)
@@ -313,13 +308,13 @@ void GEMCosmicAnalyzer::analyze(const edm::Event& event, const edm::EventSetup& 
               continue;
             }
 
+            resetBranchChamber();
+
             // NOTE
             const GEMDetId&& gem_id = eta_partition->id();
             const auto rechit_range = rechit_collection->get(gem_id);
-            const LocalPoint&& dest_local_pos = dest_state.localPosition();
+            const LocalPoint&& dest_local_pos = eta_partition->toLocal(dest_global_pos);
             const LocalError&& dest_local_err = dest_state.localError().positionError();
-
-            resetBranchChamber();
 
             b_region_ = gem_id.region();
             b_station_ = gem_id.station();
@@ -330,20 +325,21 @@ void GEMCosmicAnalyzer::analyze(const edm::Event& event, const edm::EventSetup& 
             b_path_length_ = path_length;
             b_num_same_ieta_hit_ = std::distance(rechit_range.first, rechit_range.second);
 
-            // NOTE
-            const auto& [hit, residual_x] = findClosetHit(dest_local_pos.x(), rechit_range);
-
-            if (hit != nullptr) {
+            if (auto hit = findClosetHit(dest_local_pos.x(), rechit_range)) {
               const LocalPoint&& hit_local_pos = hit->localPosition();
               const GlobalPoint&& hit_global_pos = eta_partition->toGlobal(hit_local_pos);
               const LocalError&& hit_local_err = hit->localPositionError();
 
               b_bx_ = hit->BunchX();
+              b_strip_ = eta_partition->strip(hit_local_pos);
               b_first_cluster_strip_ = hit->firstClusterStrip();
               b_cluster_size_ = hit->clusterSize();
-              b_residual_x_ = residual_x;
+
+              b_residual_x_ = dest_local_pos.x() - hit_local_pos.x();
               b_residual_y_ = dest_local_pos.y() - hit_local_pos.y();
               b_residual_phi_ = reco::deltaPhi(dest_global_pos.barePhi(), hit_global_pos.barePhi());
+              // TODO RdPhi
+
               b_pull_x_ = b_residual_x_ / std::sqrt(dest_local_err.xx() + hit_local_err.xx());
               b_pull_y_ = b_residual_y_ / std::sqrt(dest_local_err.yy() + hit_local_err.yy());
 
@@ -356,9 +352,6 @@ void GEMCosmicAnalyzer::analyze(const edm::Event& event, const edm::EventSetup& 
       } // GEMStation
     } // GEMRegion
   } // reco::Muon
-
-
-  // h_rechit_->Fill(static_cast<int>(rechit_collection->size()));
 
   int num_rechits = 0;
   for (auto hit = rechit_collection->begin(); hit != rechit_collection->end(); hit++) {
@@ -387,6 +380,9 @@ void GEMCosmicAnalyzer::analyze(const edm::Event& event, const edm::EventSetup& 
   }
 
 
+  // NOTE
+
+
 
 }
 
@@ -405,9 +401,8 @@ const GEMEtaPartition* GEMCosmicAnalyzer::findEtaPartition(
 }
 
 
-std::pair<const GEMRecHit*, float>
-GEMCosmicAnalyzer::findClosetHit(const float track_local_x,
-                                 const GEMRecHitCollection::range& range) {
+const GEMRecHit* GEMCosmicAnalyzer::findClosetHit(
+    const float track_local_x, const GEMRecHitCollection::range& range) {
 
   float min_residual_x = std::numeric_limits<float>::infinity();;
   const GEMRecHit* closest_hit = nullptr;
@@ -420,7 +415,7 @@ GEMCosmicAnalyzer::findClosetHit(const float track_local_x,
     }
   }
 
-  return std::make_pair(closest_hit, min_residual_x);
+  return closest_hit;
 }
 
 
@@ -530,6 +525,7 @@ void GEMCosmicAnalyzer::resetBranchChamber() {
   b_num_same_ieta_hit_ = -1;
   
   b_bx_ = -100;
+  b_strip_ = -1.0f;
   b_first_cluster_strip_ = -1;
   b_cluster_size_ = -1;
 
