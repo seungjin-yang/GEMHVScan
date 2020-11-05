@@ -81,7 +81,11 @@ private:
   virtual void beginJob();
   virtual void endJob();
 
+  void analyzeMuon(const edm::Event&, const edm::EventSetup&, TTree*,
+                   const edm::EDGetTokenT<edm::View<reco::Muon> >&);
+
   // NOTE
+  void makeBranch(TTree*);
   void resetBranchEvent();
   void resetBranchMuon();
   void resetBranchChamber();
@@ -94,10 +98,12 @@ private:
   MuonServiceProxy *muon_service_;
   edm::EDGetTokenT<GEMRecHitCollection> rechit_token_;
   edm::EDGetTokenT<GEMSegmentCollection> segment_token_;
-  edm::EDGetTokenT<edm::View<reco::Muon> > muon_token_;
+  edm::EDGetTokenT<edm::View<reco::Muon> > muons_token_;
+  edm::EDGetTokenT<edm::View<reco::Muon> > muonsFromCosmics_token_;
 
   edm::Service<TFileService> file_service_;
-  TTree* tree_;
+  TTree* tree_muons_;
+  TTree* tree_muonsFromCosmics_;
   TH1F* h_count_;
   TH2F* h_rechit_neg_; // GE-1/1
   TH2F* h_rechit_pos_; // GE+1/1

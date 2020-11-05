@@ -4,126 +4,31 @@
 GEMCosmicAnalyzer::GEMCosmicAnalyzer(const edm::ParameterSet& pset) {
   rechit_token_ = consumes<GEMRecHitCollection>(pset.getParameter<edm::InputTag>("recHitTag"));
   segment_token_ = consumes<GEMSegmentCollection>(pset.getParameter<edm::InputTag>("segmentTag"));
-  muon_token_ = consumes<edm::View<reco::Muon> >(pset.getParameter<edm::InputTag>("muonTag"));
+
+  muons_token_ = consumes<edm::View<reco::Muon> >(pset.getParameter<edm::InputTag>("muonsTag"));
+  muonsFromCosmics_token_ = consumes<edm::View<reco::Muon> >(pset.getParameter<edm::InputTag>("muonsFromCosmicsTag"));
+
   auto muon_service_parameter = pset.getParameter<edm::ParameterSet>("ServiceParameters");
   muon_service_ = new MuonServiceProxy(muon_service_parameter, consumesCollector());
 
-  tree_ = file_service_->make<TTree>("GEM", "GEM");
+  tree_muons_ = file_service_->make<TTree>("muons", "muons");
+  tree_muonsFromCosmics_ = file_service_->make<TTree>("muonsFromCosmics", "muonsFromCosmics");
 
-  // event
-  tree_->Branch("event", &b_event_);
-  tree_->Branch("lumi_block", &b_lumi_block_);
-  tree_->Branch("run", &b_run_);
-
-  // muon
-  tree_->Branch("index", &b_index_);
-  tree_->Branch("is_incoming", &b_is_incoming_);
-  tree_->Branch("pt", &b_pt_);
-  tree_->Branch("eta", &b_eta_);
-  tree_->Branch("phi", &b_phi_);
-  tree_->Branch("d0", &b_d0_);
-  tree_->Branch("d0_error", &b_d0_error_);
-  tree_->Branch("norm_chi2", &b_norm_chi2_);
-  tree_->Branch("ndof", &b_ndof_);
-  tree_->Branch("num_valid_hits", &b_num_valid_hits_);
-  tree_->Branch("rechits_size", &b_rechits_size_);
-
-  tree_->Branch("num_seg_csc_st1", &b_num_seg_csc_st1_);
-  tree_->Branch("num_seg_csc_st2", &b_num_seg_csc_st2_);
-  tree_->Branch("num_seg_csc_st3", &b_num_seg_csc_st3_);
-  tree_->Branch("num_seg_csc_st4", &b_num_seg_csc_st4_);
-  tree_->Branch("has_seg_csc", &b_has_seg_csc_);
-  tree_->Branch("start_x_err", &b_start_x_err_);
-
-  tree_->Branch("in_detector", &b_in_detector_);
-  tree_->Branch("in_subdet", &b_in_subdet_);
-  tree_->Branch("in_wheel", &b_in_wheel_);
-  tree_->Branch("in_station", &b_in_station_);
-  tree_->Branch("in_sector", &b_in_sector_);
-  tree_->Branch("in_superlayer", &b_in_superlayer_);
-  tree_->Branch("in_layer", &b_in_layer_);
-  tree_->Branch("in_wire", &b_in_wire_);
-  tree_->Branch("in_region", &b_in_region_);
-  tree_->Branch("in_ring", &b_in_ring_);
-  tree_->Branch("in_chamber", &b_in_chamber_);
-  tree_->Branch("in_subsector", &b_in_subsector_);
-  tree_->Branch("in_roll", &b_in_roll_);
-
-  tree_->Branch("out_detector", &b_out_detector_);
-  tree_->Branch("out_subdet", &b_out_subdet_);
-  tree_->Branch("out_wheel", &b_out_wheel_);
-  tree_->Branch("out_station", &b_out_station_);
-  tree_->Branch("out_sector", &b_out_sector_);
-  tree_->Branch("out_superlayer", &b_out_superlayer_);
-  tree_->Branch("out_layer", &b_out_layer_);
-  tree_->Branch("out_wire", &b_out_wire_);
-  tree_->Branch("out_region", &b_out_region_);
-  tree_->Branch("out_ring", &b_out_ring_);
-  tree_->Branch("out_chamber", &b_out_chamber_);
-  tree_->Branch("out_subsector", &b_out_subsector_);
-  tree_->Branch("out_roll", &b_out_roll_);
-
-  // NOTE destination
-  tree_->Branch("region", &b_region_);
-  tree_->Branch("station", &b_station_);
-  tree_->Branch("layer", &b_layer_);
-  tree_->Branch("chamber", &b_chamber_);
-  tree_->Branch("ieta", &b_ieta_);
-
-  tree_->Branch("path_length", &b_path_length_);
-  tree_->Branch("dest_state_x_err", &b_dest_x_err_);
-  tree_->Branch("num_same_ieta_hit", &b_num_same_ieta_hit_);
-
-  tree_->Branch("bx", b_bx_);
-  tree_->Branch("strip", b_strip_);
-  tree_->Branch("first_cluster_strip", &b_first_cluster_strip_);
-  tree_->Branch("cluster_size", &b_cluster_size_);
-
-  tree_->Branch("residual_x", &b_residual_x_);
-  tree_->Branch("residual_y", &b_residual_y_);
-  tree_->Branch("residual_phi", &b_residual_phi_);
-  tree_->Branch("pull_x", &b_pull_x_);
-  tree_->Branch("pull_y", &b_pull_y_);
-
-
-  // NOTE
-  std::vector<std::string> obj_category = {
-    "Event", "Muon", "GEMRecHit", "GEMSegment",
-  };
-
-  h_count_ = file_service_->make<TH1F>("h_count", "", obj_category.size(), 0.5, obj_category.size() + 0.5);
-  for (size_t idx = 0; idx < obj_category.size(); idx++) {
-    int bin = static_cast<int>(idx) + 1;
-    h_count_->GetXaxis()->SetBinLabel(bin, obj_category[idx].c_str());
-  }
-
-  // NOTE
-  h_rechit_neg_ = file_service_->make<TH2F>("h_rechit_ge-11", "RecHit Occupancy, GE-1/1;Chamber-Layer;i#eta", 72, 0.5, 72.5, 8, 0.5, 8.5);
-  h_rechit_pos_ = file_service_->make<TH2F>("h_rechit_ge+11", "RecHit Occupancy, GE+1/1;Chamber-Layer;i#eta", 72, 0.5, 72.5, 8, 0.5, 8.5);
-
-  for (int chamber = 1; chamber <= 36; chamber++) {
-    for (int layer = 1; layer <= 2; layer++) {
-
-      int bin = 2 * (chamber - 1) + layer;
-      const char* label = Form("%d-%d", chamber, layer);
-
-      h_rechit_neg_->GetXaxis()->SetBinLabel(bin, label);
-      h_rechit_pos_->GetXaxis()->SetBinLabel(bin, label);
-    }
-  }
-
-  for (int ieta = 1; ieta <= 8; ieta++) {
-    std::string label = std::to_string(ieta);
-    h_rechit_neg_->GetYaxis()->SetBinLabel(ieta, label.c_str());
-    h_rechit_pos_->GetYaxis()->SetBinLabel(ieta, label.c_str());
-  }
-
-  // NOTE
-  h_rechit_ = file_service_->make<TH1F>("h_rechit", "Number of GEMRecHit per Event", 21, -0.5, 20.5);
+  makeBranch(tree_muons_);
+  makeBranch(tree_muonsFromCosmics_);
 }
 
 
 void GEMCosmicAnalyzer::analyze(const edm::Event& event, const edm::EventSetup& setup) {
+  analyzeMuon(event, setup, tree_muons_, muons_token_);
+  analyzeMuon(event, setup, tree_muonsFromCosmics_, muonsFromCosmics_token_);
+}
+
+void GEMCosmicAnalyzer::analyzeMuon(const edm::Event& event,
+                                    const edm::EventSetup& setup,
+                                    TTree* tree,
+                                    const edm::EDGetTokenT<edm::View<reco::Muon> >& muon_token) {
+
   edm::Handle<GEMRecHitCollection> rechit_collection;
   event.getByToken(rechit_token_, rechit_collection);
   if (not rechit_collection.isValid()) {
@@ -139,7 +44,7 @@ void GEMCosmicAnalyzer::analyze(const edm::Event& event, const edm::EventSetup& 
   }
 
   edm::Handle<edm::View<reco::Muon> > muon_view;
-  event.getByToken(muon_token_, muon_view);
+  event.getByToken(muon_token, muon_view);
   if (not muon_view.isValid()) {
     edm::LogError("GEMCosmicAnalyzer") << "View<Muon> is invalid" << std::endl;
     return;
@@ -180,7 +85,6 @@ void GEMCosmicAnalyzer::analyze(const edm::Event& event, const edm::EventSetup& 
   }
 
   // NOTE
-  h_count_->Fill(1);
   resetBranchEvent();
 
   b_event_ = event.id().event();
@@ -188,7 +92,6 @@ void GEMCosmicAnalyzer::analyze(const edm::Event& event, const edm::EventSetup& 
   b_run_ = event.run();
 
   for (size_t idx = 0; idx < muon_view->size(); ++idx) {
-    h_count_->Fill(2);
     const edm::RefToBase<reco::Muon>&& muon_ref = muon_view->refAt(idx);
     const reco::Muon* muon = muon_ref.get();
 
@@ -345,7 +248,7 @@ void GEMCosmicAnalyzer::analyze(const edm::Event& event, const edm::EventSetup& 
 
             }
 
-            tree_->Fill();
+            tree->Fill();
 
           } // GEMChamber
         } // GEMSuperChamber
@@ -353,37 +256,7 @@ void GEMCosmicAnalyzer::analyze(const edm::Event& event, const edm::EventSetup& 
     } // GEMRegion
   } // reco::Muon
 
-  int num_rechits = 0;
-  for (auto hit = rechit_collection->begin(); hit != rechit_collection->end(); hit++) {
-    h_count_->Fill(3);
-    num_rechits++;
-
-    const GEMDetId&& gem_id = hit->gemId();
-    int xbin = 2 * (gem_id.chamber() - 1) + gem_id.layer();
-    if (gem_id.region() == 1) {
-      h_rechit_pos_->Fill(xbin, gem_id.roll());
-
-    } else if (gem_id.region() == -1) {
-      h_rechit_pos_->Fill(xbin, gem_id.roll());
-
-    } else {
-      edm::LogError("") << "GEMRecHit with GEMDetId=" << gem_id << std::endl;
-
-    }
-
-  }
-
-  h_rechit_->Fill(num_rechits);
-
-  for (auto segment = segment_collection->begin(); segment != segment_collection->end(); segment++) {
-    h_count_->Fill(4);
-  }
-
-
   // NOTE
-
-
-
 }
 
 
@@ -481,6 +354,84 @@ GEMCosmicAnalyzer::DetIdCandidate GEMCosmicAnalyzer::getDetIdCandidate(unsigned 
   }
 
   return id;
+}
+
+
+void GEMCosmicAnalyzer::makeBranch(TTree* tree) {
+  // event
+  tree->Branch("event", &b_event_);
+  tree->Branch("lumi_block", &b_lumi_block_);
+  tree->Branch("run", &b_run_);
+
+  // muon
+  tree->Branch("index", &b_index_);
+  tree->Branch("is_incoming", &b_is_incoming_);
+  tree->Branch("pt", &b_pt_);
+  tree->Branch("eta", &b_eta_);
+  tree->Branch("phi", &b_phi_);
+  tree->Branch("d0", &b_d0_);
+  tree->Branch("d0_error", &b_d0_error_);
+  tree->Branch("norm_chi2", &b_norm_chi2_);
+  tree->Branch("ndof", &b_ndof_);
+  tree->Branch("num_valid_hits", &b_num_valid_hits_);
+  tree->Branch("rechits_size", &b_rechits_size_);
+
+  tree->Branch("num_seg_csc_st1", &b_num_seg_csc_st1_);
+  tree->Branch("num_seg_csc_st2", &b_num_seg_csc_st2_);
+  tree->Branch("num_seg_csc_st3", &b_num_seg_csc_st3_);
+  tree->Branch("num_seg_csc_st4", &b_num_seg_csc_st4_);
+  tree->Branch("has_seg_csc", &b_has_seg_csc_);
+  tree->Branch("start_x_err", &b_start_x_err_);
+
+  tree->Branch("in_detector", &b_in_detector_);
+  tree->Branch("in_subdet", &b_in_subdet_);
+  tree->Branch("in_wheel", &b_in_wheel_);
+  tree->Branch("in_station", &b_in_station_);
+  tree->Branch("in_sector", &b_in_sector_);
+  tree->Branch("in_superlayer", &b_in_superlayer_);
+  tree->Branch("in_layer", &b_in_layer_);
+  tree->Branch("in_wire", &b_in_wire_);
+  tree->Branch("in_region", &b_in_region_);
+  tree->Branch("in_ring", &b_in_ring_);
+  tree->Branch("in_chamber", &b_in_chamber_);
+  tree->Branch("in_subsector", &b_in_subsector_);
+  tree->Branch("in_roll", &b_in_roll_);
+
+  tree->Branch("out_detector", &b_out_detector_);
+  tree->Branch("out_subdet", &b_out_subdet_);
+  tree->Branch("out_wheel", &b_out_wheel_);
+  tree->Branch("out_station", &b_out_station_);
+  tree->Branch("out_sector", &b_out_sector_);
+  tree->Branch("out_superlayer", &b_out_superlayer_);
+  tree->Branch("out_layer", &b_out_layer_);
+  tree->Branch("out_wire", &b_out_wire_);
+  tree->Branch("out_region", &b_out_region_);
+  tree->Branch("out_ring", &b_out_ring_);
+  tree->Branch("out_chamber", &b_out_chamber_);
+  tree->Branch("out_subsector", &b_out_subsector_);
+  tree->Branch("out_roll", &b_out_roll_);
+
+  // NOTE destination
+  tree->Branch("region", &b_region_);
+  tree->Branch("station", &b_station_);
+  tree->Branch("layer", &b_layer_);
+  tree->Branch("chamber", &b_chamber_);
+  tree->Branch("ieta", &b_ieta_);
+
+  tree->Branch("path_length", &b_path_length_);
+  tree->Branch("dest_state_x_err", &b_dest_x_err_);
+  tree->Branch("num_same_ieta_hit", &b_num_same_ieta_hit_);
+
+  tree->Branch("bx", b_bx_);
+  tree->Branch("strip", b_strip_);
+  tree->Branch("first_cluster_strip", &b_first_cluster_strip_);
+  tree->Branch("cluster_size", &b_cluster_size_);
+
+  tree->Branch("residual_x", &b_residual_x_);
+  tree->Branch("residual_y", &b_residual_y_);
+  tree->Branch("residual_phi", &b_residual_phi_);
+  tree->Branch("pull_x", &b_pull_x_);
+  tree->Branch("pull_y", &b_pull_y_);
 }
 
 

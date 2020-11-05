@@ -44,7 +44,8 @@ process.GlobalTag = GlobalTag(process.GlobalTag, 'auto:phase1_2021_cosmics', '')
 # Path and EndPath definitions
 process.GEMCosmicAnalyzer = cms.EDAnalyzer('GEMCosmicAnalyzer', 
     process.MuonServiceProxy, 
-    muonTag = cms.InputTag('muons'),
+    muonsTag = cms.InputTag('muons'),
+    muonsFromCosmicsTag = cms.InputTag('muonsFromCosmics'),
     recHitTag = cms.InputTag('gemRecHits'),
     segmentTag = cms.InputTag('gemSegments'),
 )
